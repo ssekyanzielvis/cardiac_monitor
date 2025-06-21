@@ -1,16 +1,21 @@
 from flask import Flask, request, jsonify, render_template
-from datetime import datetime
+import sqlite3
+from contextlib import closing
 
 app = Flask(__name__)
 
-# In-memory storage for cardiac data
-cardiac_data = {
-    "latest_reading": {
-        "hr": None,
-        "spo2": None,
-        "timestamp": None
-    }
-}
+# Initialize database
+def init_db():
+    try:
+        with closing(sqlite3.connect('cardiac_data.db')) as conn:
+            with conn:
+                conn.execute('''CREATE TABLE IF NOT EXISTS readings 
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                              timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, 
+                              hr INTEGER, 
+                              spo2 INTEGER)''')
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
 
 # Route to receive and store cardiac data
 @app.route('/api/cardiac_data', methods=['POST'])
@@ -26,42 +31,47 @@ def receive_cardiac_data():
         return jsonify({'error': 'Missing hr or spo2 data'}), 400
 
     try:
-        # Store the data in memory
-        cardiac_data["latest_reading"] = {
-            "hr": hr,
-            "spo2": spo2,
-            "timestamp": datetime.now().isoformat()
-        }
+        with closing(sqlite3.connect('cardiac_data.db')) as conn:
+            with conn:
+                conn.execute("INSERT INTO readings (hr, spo2) VALUES (?, ?)", (hr, spo2))
     except Exception as e:
         return jsonify({'error': 'Failed to store data', 'details': str(e)}), 500
 
-    return jsonify({
-        'message': 'Data stored successfully',
-        'hr': hr,
-        'spo2': spo2,
-        'timestamp': cardiac_data["latest_reading"]["timestamp"]
-    }), 200
+    return jsonify({'message': 'Data stored successfully', 'hr': hr, 'spo2': spo2}), 200
 
 # Route to get latest reading
 @app.route('/api/latest_reading', methods=['GET'])
 def get_latest_reading():
-    latest = cardiac_data["latest_reading"]
-    if latest["hr"] is not None and latest["spo2"] is not None:
-        return jsonify({
-            'hr': latest["hr"],
-            'spo2': latest["spo2"],
-            'timestamp': latest["timestamp"]
-        })
+    try:
+        with closing(sqlite3.connect('cardiac_data.db')) as conn:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT hr, spo2 FROM readings ORDER BY timestamp DESC LIMIT 1")
+                result = cursor.fetchone()
+    except sqlite3.Error as e:
+        return jsonify({'error': 'Database error', 'details': str(e)}), 500
+
+    if result:
+        return jsonify({'hr': result[0], 'spo2': result[1]})
     return jsonify({'error': 'No data available'}), 404
 
 # Route to render the monitor template
 @app.route('/')
 def monitor():
-    latest = cardiac_data["latest_reading"]
-    hr = latest["hr"] if latest["hr"] is not None else 0
-    spo2 = latest["spo2"] if latest["spo2"] is not None else 0
+    try:
+        with closing(sqlite3.connect('cardiac_data.db')) as conn:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT hr, spo2 FROM readings ORDER BY timestamp DESC LIMIT 1")
+                result = cursor.fetchone()
+    except sqlite3.Error as e:
+        return render_template('error.html', error=str(e)), 500
+
+    hr = result[0] if result else 0
+    spo2 = result[1] if result else 0
 
     return render_template('monitor.html', hr=hr, spo2=spo2)
 
 if __name__ == '__main__':
+    init_db()
     app.run(debug=True)
