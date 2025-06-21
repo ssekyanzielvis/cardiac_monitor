@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardiac Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="monitor">
+        <div class="reading">
+            <span class="label">HR</span>
+            <span class="value" id="hr">{{ hr }}</span>
+        </div>
+        <div class="reading">
+            <span class="label">SpO2</span>
+            <span class="value" id="spo2">{{ spo2 }}</span>
+        </div>
+        <div class="waveform" id="waveform">
+            <!-- Waveform will be drawn here by JavaScript -->
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
